@@ -6,46 +6,47 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import json
 
+
 # Read in XML File
 def read_protocol(path):
     """Reads in protocols as BeautifulSoup
-    
+
     This function uses protocols of the German Bundestag
     in raw XML format and converts them into a more
     easy to parse format by utilizing BeautifulSoup and
     the lxml parser.
-    
+
     The Input has to be the path of a Bundestag protocol
     in raw XML format. Make sure that it was published
-    during or after the 19th parliamentary period. Older 
+    during or after the 19th parliamentary period. Older
     XML files can not be parsed due to little structure.
-    
+
     Parameters
     -----------
     path : string
-        The path to the specific Bundestag protocol. 
+        The path to the specific Bundestag protocol.
         Must be a valid XML file.
-        
+
     Returns
     -----------
     protocol : BeautifulSoup
         A BeautifulSoup object used for further parsing.
     """
-    with open(path, mode = "r", encoding = "utf-8") as f:
+    with open(path, mode="r", encoding="utf-8") as f:
         protocol = BeautifulSoup(f.read(), "lxml")
-    return(protocol)
+    return protocol
 
 
 # Get Overall Information
 def parse_metadata(protocol):
     """Parse meta data from protocol
-    
+
     If you would like to parse meta data from a given
     protocol, you can use this function. It will yield
-    the parliamentary period, parliamentary session, 
-    location and the date of the session the protocol was 
+    the parliamentary period, parliamentary session,
+    location and the date of the session the protocol was
     compiled for.
-    
+
     Parameters
     -----------
     protocol: BeautifulSoup
@@ -54,7 +55,7 @@ def parse_metadata(protocol):
         to parse the protcol by using read_protocol
         first. The output of that function should be
         the input to this function.
-    
+
     Returns
     -----------
     meta_dict: Dictionary
@@ -83,34 +84,78 @@ def parse_metadata(protocol):
     except Exception:
         date = None
     # Collect Information to Dictionary
-    meta_dict = {"location" : location,
-                 "date" : date,
-                 "period" : period,
-                 "session" : session}
+    meta_dict = {
+        "location": location,
+        "date": date,
+        "period": period,
+        "session": session,
+    }
     # Return Dictionary Containing Results
-    return(meta_dict)
+    return meta_dict
 
-# Parse Single Speech
-def parse_speech(speech):
-    """Split information on speaker and text from speech
-    
-    This function will yield the first name, last name,
-    party and role of a speaker, as well as the text of
-    his/her speech. This way, you will obtain the raw
-    speech without any comments and some data about the
-    speaker.
-    
+
+# Parse Agenda Topic
+def parse_topic(agenda):
+    """Split protocol into multiple agenda points
+
+    This function will yield the agenda point and a
+    description of the agenda point.
+
     Parameters
     -----------
     speech: BeautifulSoup
         Use a single speech extracted from the entire
         protocol converted by read_protocol.
-        
+
+    Returns
+    -----------
+    topic_dict: Dictionary
+        A dictionary containing the keys: Agenda
+        point number and description.
+    """
+    # Parse information regarding agenda point
+    try:
+        agenda = agenda.find("tagesordnungspunkt")
+        # Parse topic ID
+        try:
+            agenda_nr = (
+                agenda["top-id"].get_text().replace("Tagesordnungspunkt", "").strip()
+            )
+        except Exception:
+            agenda_nr = None
+        # Parse topic description
+        try:
+            agenda_title = agenda.find_all("p", {"klasse": ["T_fett"]})
+            agenda_title = "\n".join([x.get_text() for x in agenda_title])
+        except Exception:
+            agenda_title = None
+        topic_dict = {"agenda_nr": agenda_nr, "agenda_title": agenda_title}
+    except Exception:
+        topic_dict = {"agenda_nr": None, "agenda_title": None}
+    return topic_dict
+
+
+# Parse Single Speech
+def parse_speech(speech):
+    """Split information on speaker and text from speech
+
+    This function will yield the first name, last name,
+    party and role of a speaker, as well as the text of
+    his/her speech. This way, you will obtain the raw
+    speech without any comments and some data about the
+    speaker.
+
+    Parameters
+    -----------
+    speech: BeautifulSoup
+        Use a single speech extracted from the entire
+        protocol converted by read_protocol.
+
     Returns
     -----------
     speech_dict: Dictionary
         A dictionary containing the keys: Speaker,
-        Party, and Text. Speaker is the concatenation 
+        Party, and Text. Speaker is the concatenation
         of the first name and last name. Party represents
         the party affiliation of the speaker. Text is the
         raw speech stripped of all comments.
@@ -144,71 +189,76 @@ def parse_speech(speech):
         except Exception:
             role = None
         # Collect Results to Dictionary
-        speaker_dict = {"id_speaker" : id_speaker,
-                        "firstname" : firstname,
-                        "lastname" : lastname,
-                        "name" : firstname + " " + lastname,
-                        "party" : party,
-                        "role" : role}
+        speaker_dict = {
+            "id_speaker": id_speaker,
+            "firstname": firstname,
+            "lastname": lastname,
+            "name": firstname + " " + lastname,
+            "party": party,
+            "role": role,
+        }
     # Create Missing Values if no Speaker is associated to Speech
     except Exception:
-        speaker_dict = {"id_speaker" : None,
-                        "firstname" : None,
-                        "lastname" : None,
-                        "name" : None,
-                        "party" : None,
-                        "role" : None}
+        speaker_dict = {
+            "id_speaker": None,
+            "firstname": None,
+            "lastname": None,
+            "name": None,
+            "party": None,
+            "role": None,
+        }
     # Parse Speech
-        # Parse ID of Speech
+    # Parse ID of Speech
     try:
         id_speech = speech["id"]
     except Exception:
         id_speech = None
         # Parse Text of Speech
     try:
-        text = speech.find_all("p", {"klasse" : ["J", "J_1", "O"]})
+        text = speech.find_all("p", {"klasse": ["J", "J_1", "O"]})
         text = "\n".join([x.get_text() for x in text])
     except Exception:
         text = None
 
-    
     # Join Information on Name, Party, Role, and Text into single
     # Dictionary
-    speech_dict = {"SpeakerID" : speaker_dict["id_speaker"],
-                   "Speaker" : speaker_dict["name"], 
-                   "Faction" : speaker_dict["party"],
-                   "Role" : speaker_dict["role"],
-                   "SpeechID" : id_speech,
-                   "Text" : text}
-    return(speech_dict)
-    
-    
+    speech_dict = {
+        "SpeakerID": speaker_dict["id_speaker"],
+        "Speaker": speaker_dict["name"],
+        "Faction": speaker_dict["party"],
+        "Role": speaker_dict["role"],
+        "SpeechID": id_speech,
+        "Text": text,
+    }
+    return speech_dict
+
+
 # Parse all Speeches in a Protocol
-def collect_speeches(protocol, output = "dataframe", metadata = False):
-    """Collect all speeches into either a DataFrame, 
+def collect_speeches(protocol, output="dataframe", metadata=False):
+    """Collect all speeches into either a DataFrame,
        json, or list
-    
-    After converting a given protocol with 
-    read_protocol, you can collect all speeches 
-    (plus additional meta data) into a Pandas 
+
+    After converting a given protocol with
+    read_protocol, you can collect all speeches
+    (plus additional meta data) into a Pandas
     DataFrame, json, or list.
-    
-    The result is highly structured and can be used 
+
+    The result is highly structured and can be used
     for further analysis.
-    
+
     Parameters
     -----------
     protocol: BeautifulSoup
-        The result of using read_protocol on a 
+        The result of using read_protocol on a
         specific protocol.
-    output: string ['dataframe', 'json', 'list']; 
+    output: string ['dataframe', 'json', 'list'];
             default: 'dataframe'
-        The desired output format. Could either be 
+        The desired output format. Could either be
         a pandas DataFrame, a json string or a list.
     metadata: boolean; default: False
         Whether or not to include any meta data
         for the speeches in the result.
-        
+
     Returns
     -----------
     result: Either pandas.DataFrame, str or list
@@ -218,20 +268,25 @@ def collect_speeches(protocol, output = "dataframe", metadata = False):
     """
     result_list = []
     meta = parse_metadata(protocol)
-    for speech in protocol.find_all("rede"):
-        result = parse_speech(speech)
-        if metadata:
-            result["Location"] = meta["location"]
-            result["Date"] = meta["date"]
-            result["Period"] = meta["period"]
-            result["Session"] = meta["session"]
-        result_list.append(result)
+    for topic in protocol.find_all("tagesordnungspunkt"):
+        topic_result = parse_topic(topic)
+        for speech in topic.find_all("rede"):
+            result = parse_speech(speech)
+            if topic_result:
+                result["AgendaNr"] = topic_result["agenda_nr"]
+                result["AgendaTitle"] = topic_result["agenda_title"]
+            if metadata:
+                result["Location"] = meta["location"]
+                result["Date"] = meta["date"]
+                result["Period"] = meta["period"]
+                result["Session"] = meta["session"]
+            result_list.append(result)
     if output == "dataframe":
         result = pd.DataFrame(result_list)
     elif output == "json":
-        result = json.dumps(result_list, ensure_ascii = False, indent = 1)
+        result = json.dumps(result_list, ensure_ascii=False, indent=1)
     elif output == "list":
         result = result_list
     else:
         raise ValueError("Output must either be 'dataframe', 'json', or 'list'.")
-    return(result)
+    return result
